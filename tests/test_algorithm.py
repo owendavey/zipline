@@ -956,7 +956,7 @@ def before_trading_start(context, data):
             )
 
             data_portal = create_data_portal(
-                env,
+                env.asset_finder,
                 tempdir,
                 sim_params,
                 equities.index,
@@ -1555,8 +1555,8 @@ def handle_data(context, data):
             trades = factory.create_daily_trade_source(
                 [0], self.sim_params, self.env, self.trading_schedule)
             data_portal = create_data_portal_from_trade_history(
-                self.env, self.trading_schedule, tempdir, self.sim_params,
-                {0: trades})
+                self.env.asset_finder, self.trading_schedule, tempdir,
+                self.sim_params, {0: trades})
             results = test_algo.run(data_portal)
 
             all_txns = [
@@ -2660,7 +2660,7 @@ class TestTradingControls(WithSimParams, WithDataPortal, ZiplineTestCase):
             )
 
             data_portal = create_data_portal(
-                env,
+                env.asset_finder,
                 tempdir,
                 sim_params,
                 [1],
@@ -2782,7 +2782,7 @@ class TestTradingControls(WithSimParams, WithDataPortal, ZiplineTestCase):
                 env=env,
             )
             data_portal = create_data_portal(
-                env,
+                env.asset_finder,
                 tempdir,
                 self.sim_params,
                 [0],
@@ -2797,7 +2797,7 @@ class TestTradingControls(WithSimParams, WithDataPortal, ZiplineTestCase):
         with TempDirectory() as tempdir, \
                 tmp_trading_env(equities=metadata) as env:
             data_portal = create_data_portal(
-                env,
+                env.asset_finder,
                 tempdir,
                 self.sim_params,
                 [0],
@@ -2817,7 +2817,7 @@ class TestTradingControls(WithSimParams, WithDataPortal, ZiplineTestCase):
         with TempDirectory() as tempdir, \
                 tmp_trading_env(equities=metadata) as env:
             data_portal = create_data_portal(
-                env,
+                env.asset_finder,
                 tempdir,
                 self.sim_params,
                 [0],
@@ -3387,7 +3387,7 @@ class TestEquityAutoClose(WithTmpDir, WithTradingSchedule, ZiplineTestCase):
             )
             reader = BcolzDailyBarReader(path)
             data_portal = DataPortal(
-                env, self.trading_schedule,
+                env.asset_finder, self.trading_schedule,
                 first_trading_day=reader.first_trading_day,
                 equity_daily_reader=reader,
             )
@@ -3417,7 +3417,7 @@ class TestEquityAutoClose(WithTmpDir, WithTradingSchedule, ZiplineTestCase):
             )
             reader = BcolzMinuteBarReader(self.tmpdir.path)
             data_portal = DataPortal(
-                env, self.trading_schedule,
+                env.asset_finder, self.trading_schedule,
                 first_trading_day=reader.first_trading_day,
                 equity_minute_reader=reader,
             )
