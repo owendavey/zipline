@@ -103,7 +103,8 @@ class USEquityHistoryLoader(with_metaclass(ABCMeta)):
     def _array(self, start, end, assets, field):
         pass
 
-    def _get_adjustments_in_range(self, asset, dts, field):
+    def _get_adjustments_in_range(self, asset, dts, field,
+                                  is_perspective_after):
         """
         Get the Float64Multiply objects to pass to an AdjustedArrayWindow.
 
@@ -126,6 +127,12 @@ class USEquityHistoryLoader(with_metaclass(ABCMeta)):
             The days for which adjustment data is needed.
         field : str
             OHLCV field for which to get the adjustments.
+        is_perspective_after : bool
+            see: `USEquityHistoryLoader.history`
+            If True, the index at which the Mulitply object is registered to
+            be popped is calculated so that it applies to the last slot in the
+            sliding window  when the adjustment occurs immediately after the dt
+            that slot represents.
 
         Returns
         -------
@@ -142,30 +149,42 @@ class USEquityHistoryLoader(with_metaclass(ABCMeta)):
                 dt = m[0]
                 if start < dt <= end:
                     end_loc = dts.searchsorted(dt)
+                    adj_loc = end_loc
+                    if is_perspective_after:
+                        # Set adjustment pop location so that it applies
+                        # to last value if adjustment occurs immediately after
+                        # the last slot.
+                        adj_loc -= 1
                     mult = Float64Multiply(0,
                                            end_loc - 1,
                                            0,
                                            0,
                                            m[1])
                     try:
-                        adjs[end_loc].append(mult)
+                        adjs[adj_loc].append(mult)
                     except KeyError:
-                        adjs[end_loc] = [mult]
+                        adjs[adj_loc] = [mult]
             divs = self._adjustments_reader.get_adjustments_for_sid(
                 'dividends', sid)
             for d in divs:
                 dt = d[0]
                 if start < dt <= end:
                     end_loc = dts.searchsorted(dt)
+                    adj_loc = end_loc
+                    if is_perspective_after:
+                        # Set adjustment pop location so that it applies
+                        # to last value if adjustment occurs immediately after
+                        # the last slot.
+                        adj_loc -= 1
                     mult = Float64Multiply(0,
                                            end_loc - 1,
                                            0,
                                            0,
                                            d[1])
                     try:
-                        adjs[end_loc].append(mult)
+                        adjs[adj_loc].append(mult)
                     except KeyError:
-                        adjs[end_loc] = [mult]
+                        adjs[adj_loc] = [mult]
         splits = self._adjustments_reader.get_adjustments_for_sid(
             'splits', sid)
         for s in splits:
@@ -176,18 +195,25 @@ class USEquityHistoryLoader(with_metaclass(ABCMeta)):
                 ratio = s[1]
             if start < dt <= end:
                 end_loc = dts.searchsorted(dt)
+                adj_loc = end_loc
+                if is_perspective_after:
+                    # Set adjustment pop location so that it applies
+                    # to last value if adjustment occurs immediately after
+                    # the last slot.
+                    adj_loc -= 1
                 mult = Float64Multiply(0,
                                        end_loc - 1,
                                        0,
                                        0,
                                        ratio)
                 try:
-                    adjs[end_loc].append(mult)
+                    adjs[adj_loc].append(mult)
                 except KeyError:
-                    adjs[end_loc] = [mult]
+                    adjs[adj_loc] = [mult]
         return adjs
 
-    def _ensure_sliding_windows(self, assets, dts, field):
+    def _ensure_sliding_windows(self, assets, dts, field,
+                                is_perspective_after):
         """
         Ensure that there is a Float64Multiply window for each asset that can
         provide data for the given parameters.
@@ -207,6 +233,8 @@ class USEquityHistoryLoader(with_metaclass(ABCMeta)):
             in the calendar.
         field : str
             The OHLCV field for which to retrieve data.
+        is_perspective_after : bool
+            see: `USEquityHistoryLoader.history`
 
         Returns
         -------
@@ -218,10 +246,11 @@ class USEquityHistoryLoader(with_metaclass(ABCMeta)):
         size = len(dts)
         asset_windows = {}
         needed_assets = []
+
         for asset in assets:
             try:
                 asset_windows[asset] = self._window_blocks[field].get(
-                    (asset, size), end)
+                    (asset, size, is_perspective_after), end)
             except KeyError:
                 needed_assets.append(asset)
 
@@ -245,7 +274,7 @@ class USEquityHistoryLoader(with_metaclass(ABCMeta)):
             for i, asset in enumerate(needed_assets):
                 if self._adjustments_reader:
                     adjs = self._get_adjustments_in_range(
-                        asset, prefetch_dts, field)
+                        asset, prefetch_dts, field, is_perspective_after)
                 else:
                     adjs = {}
                 window = Float64Window(
@@ -257,13 +286,14 @@ class USEquityHistoryLoader(with_metaclass(ABCMeta)):
                 )
                 sliding_window = SlidingWindow(window, size, start_ix, offset)
                 asset_windows[asset] = sliding_window
-                self._window_blocks[field].set((asset, size),
-                                               sliding_window,
-                                               prefetch_end)
+                self._window_blocks[field].set(
+                    (asset, size, is_perspective_after),
+                    sliding_window,
+                    prefetch_end)
 
         return [asset_windows[asset] for asset in assets]
 
-    def history(self, assets, dts, field):
+    def history(self, assets, dts, field, is_perspective_after):
         """
         A window of pricing data with adjustments applied assuming that the
         end of the window is the day before the current simulation time.
@@ -278,13 +308,22 @@ class USEquityHistoryLoader(with_metaclass(ABCMeta)):
             in the calendar.
         field : str
             The OHLCV field for which to retrieve data.
-
+        is_perspective_after : bool
+            True if the window is being viewed immediately after the last dt
+            in the sliding window.
+            False if the window is being last dt.
+            Used to determine when adjustments should first be applied to the
+            last dt in the current window; when True the last value of sliding
+            window will have the adjustments applied.
 
         Returns
         -------
         out : np.ndarray with shape(len(days between start, end), len(assets))
         """
-        block = self._ensure_sliding_windows(assets, dts, field)
+        block = self._ensure_sliding_windows(assets,
+                                             dts,
+                                             field,
+                                             is_perspective_after)
         end_ix = self._calendar.get_loc(dts[-1])
         return hstack([window.get(end_ix) for window in block])
 
