@@ -15,8 +15,6 @@
 # limitations under the License.
 
 
-# test comment
-
 from zipline.api import order, record, symbol
 
 
