@@ -1398,8 +1398,7 @@ class TestAlgoScript(WithLogger,
 
     @classmethod
     def make_daily_bar_data(cls):
-        days = len(cls.trading_schedule.execution_days_in_range(cls.START_DATE,
-                                                                cls.END_DATE))
+        days = len(cls.bcolz_daily_bar_days)
         return trades_by_sid_to_dfs(
             {
                 0: factory.create_trade_history(
@@ -1417,7 +1416,7 @@ class TestAlgoScript(WithLogger,
                     cls.sim_params,
                     cls.trading_schedule)
             },
-            index=cls.sim_params.trading_days,
+            index=cls.bcolz_daily_bar_days,
         )
 
     def test_noop(self):
